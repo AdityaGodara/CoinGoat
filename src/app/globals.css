@@ -1,26 +1,132 @@
 @import "tailwindcss";
+@plugin "@tailwindcss/typography";
+
+@custom-variant dark (&:where(.dark, .dark *));
 
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  --background: #fcfcfd;
+  --surface: #f7f7f8;
+  --surface-hover: #eef0f2;
+  --border: #e4e6eb;
+  --foreground: #0a0b0d;
+  --muted: #5b6270;
+  --accent: #b8790a;
+  --accent-foreground: #0a0b0d;
+}
+
+.dark {
+  --background: #0a0b0d;
+  --surface: #121417;
+  --surface-hover: #1a1d21;
+  --border: #23262b;
+  --foreground: #f4f5f6;
+  --muted: #8b909a;
+  --accent: #f5b93e;
+  --accent-foreground: #0a0b0d;
 }
 
 @theme inline {
   --color-background: var(--background);
+  --color-surface: var(--surface);
+  --color-surface-hover: var(--surface-hover);
+  --color-border: var(--border);
   --color-foreground: var(--foreground);
+  --color-muted: var(--muted);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-up: #16c784;
+  --color-down: #ea3943;
+
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
+
+  --text-article-body: 1.125rem;
+  --text-article-body--line-height: 1.8;
+  --text-article-lead: 1.375rem;
+  --text-article-lead--line-height: 1.6;
+  --text-headline-sm: 1.5rem;
+  --text-headline-sm--line-height: 1.3;
+  --text-headline-md: 2rem;
+  --text-headline-md--line-height: 1.2;
+  --text-headline-lg: 3rem;
+  --text-headline-lg--line-height: 1.1;
+  --text-headline-lg--letter-spacing: -0.02em;
+  --text-headline-xl: 4rem;
+  --text-headline-xl--line-height: 1.05;
+  --text-headline-xl--letter-spacing: -0.03em;
+
+  --animate-marquee: marquee 42s linear infinite;
+  --animate-kenburns: kenburns 18s ease-out forwards;
+  --animate-shimmer: shimmer 1.8s ease-in-out infinite;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
+@keyframes marquee {
+  to {
+    transform: translateX(-50%);
   }
 }
 
-body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+@keyframes kenburns {
+  from {
+    transform: scale(1);
+  }
+  to {
+    transform: scale(1.08);
+  }
+}
+
+@keyframes shimmer {
+  0%,
+  100% {
+    opacity: 0.6;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+
+@layer base {
+  body {
+    background: var(--color-background);
+    color: var(--color-foreground);
+  }
+
+  ::selection {
+    background: color-mix(in oklab, var(--color-accent) 35%, transparent);
+    color: var(--color-foreground);
+  }
+}
+
+@layer utilities {
+  .glass-subtle {
+    background-color: color-mix(in oklab, var(--color-surface) 70%, transparent);
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+  }
+
+  .glass-nav {
+    background-color: color-mix(in oklab, var(--color-background) 65%, transparent);
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+  }
+
+  .prose-article {
+    --tw-prose-body: var(--color-foreground);
+    --tw-prose-headings: var(--color-foreground);
+    --tw-prose-links: var(--color-accent);
+    --tw-prose-bold: var(--color-foreground);
+    --tw-prose-quotes: var(--color-muted);
+    --tw-prose-quote-borders: var(--color-accent);
+    --tw-prose-bullets: var(--color-muted);
+    --tw-prose-hr: var(--color-border);
+    font-size: var(--text-article-body);
+    line-height: var(--text-article-body--line-height);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .animate-marquee,
+  .animate-kenburns {
+    animation: none !important;
+  }
 }
