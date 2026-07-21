@@ -37,7 +37,7 @@ export default async function Home() {
       )}
 
       <div className="grid gap-12 lg:grid-cols-[2fr_1fr]">
-        <div className="space-y-16">
+        <div className="min-w-0 space-y-16">
           <LatestNewsSection articles={latestForGrid} />
           <CategoryHighlightSection category={defiCategory} articles={defiArticles.items} layout="rail" />
           <CategoryHighlightSection category={nftCategory} articles={nftArticles.items} layout="split" />

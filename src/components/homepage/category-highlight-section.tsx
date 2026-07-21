@@ -13,7 +13,7 @@ export function CategoryHighlightSection({ category, articles, layout = "grid" }
   if (articles.length === 0) return null;
 
   return (
-    <section>
+    <section className="min-w-0">
       <SectionHeading title={category.name} viewAllHref={`/category/${category.slug}`} />
       {layout === "rail" && (
         <StaggerGroup className="-mx-4 flex snap-x snap-mandatory gap-4 overflow-x-auto px-4 pb-2 [scrollbar-width:none] sm:mx-0 sm:px-0 [&::-webkit-scrollbar]:hidden">
