@@ -1,0 +1,47 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0"
+    xmlns:content="http://purl.org/rss/1.0/modules/content/"
+    xmlns:dc="http://purl.org/dc/elements/1.1/"
+    xmlns:media="http://search.yahoo.com/mrss/"
+    xmlns:atom="http://www.w3.org/2005/Atom">
+  <channel>
+    <title>CoinDesk (sample)</title>
+    <link>https://www.coindesk.com/</link>
+    <description>Sample feed for unit tests</description>
+    <lastBuildDate>Wed, 22 Jul 2026 12:00:00 +0000</lastBuildDate>
+
+    <item>
+      <title>Bitcoin Rallies Past Key Resistance</title>
+      <link>https://www.coindesk.com/markets/2026/07/22/bitcoin-rallies</link>
+      <guid isPermaLink="false">coindesk:2026:07:22:btc-rally</guid>
+      <pubDate>Wed, 22 Jul 2026 10:30:00 +0000</pubDate>
+      <dc:creator>Jane Analyst</dc:creator>
+      <category>Markets</category>
+      <category>Bitcoin</category>
+      <description>Bitcoin pushed through resistance as institutional demand grows.</description>
+      <content:encoded><![CDATA[<p>Full article body about the bitcoin rally.</p>]]></content:encoded>
+      <media:content url="https://images.coindesk.com/sample/btc-rally.jpg" type="image/jpeg" medium="image"/>
+    </item>
+
+    <item>
+      <title>Missing GUID Item Falls Back To Link</title>
+      <link>https://www.coindesk.com/tech/2026/07/22/no-guid-item</link>
+      <pubDate>Wed, 22 Jul 2026 09:00:00 +0000</pubDate>
+      <dc:creator>John Reporter</dc:creator>
+      <category>Technology</category>
+      <description>An item with no guid element at all.</description>
+      <content:encoded><![CDATA[<p>Body text for the no-guid item.</p>]]></content:encoded>
+    </item>
+
+    <item>
+      <title>Unparseable Date Item</title>
+      <link>https://www.coindesk.com/policy/2026/07/22/bad-date-item</link>
+      <guid isPermaLink="false">coindesk:2026:07:22:bad-date</guid>
+      <pubDate>not-a-real-date</pubDate>
+      <dc:creator>Alex Editor</dc:creator>
+      <category>Policy</category>
+      <description>An item whose pubDate cannot be parsed.</description>
+      <content:encoded><![CDATA[<p>Body text for the bad-date item.</p>]]></content:encoded>
+    </item>
+  </channel>
+</rss>
