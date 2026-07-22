@@ -1,16 +1,18 @@
-import json
 import logging
+import time
+from concurrent.futures import ThreadPoolExecutor, as_completed
+from dataclasses import dataclass
 
 import feedparser
+import httpx
 import redis
-from sqlalchemy import func, select
-from sqlalchemy.dialects.postgresql import insert
 
-from app.core.cache_keys import article_key, latest_list_key
 from app.core.config import settings
 from app.db.session import SyncSessionLocal
-from app.models.article import Article
-from app.schemas.article import ArticleListOut, ArticleOut
+from app.models.news_source import NewsSource
+from app.repositories.news_source_repository import NewsSourceRepository
+from app.services.cache_refresh import CacheRefreshService
+from app.services.deduplication import DeduplicationService, IngestOutcome
 from worker.celery_app import celery_app
 from worker.feed_client import FeedFetchError, fetch_feed_bytes
 from worker.locking import try_lock
@@ -18,102 +20,112 @@ from worker.normalize import normalize_entry
 
 logger = logging.getLogger(__name__)
 
-FETCH_LOCK_NAME = "lock:fetch:coindesk"
-SOURCE = "coindesk"
 
-_UPSERT_COLUMNS = [
-    "link",
-    "title",
-    "summary",
-    "content_html",
-    "author",
-    "categories",
-    "image_url",
-    "published_at",
-    "raw_payload",
-]
+@dataclass
+class FetchResult:
+    acquired: bool
+    raw: bytes | None
 
 
-def _upsert_articles(session, normalized: list) -> list[int]:
-    rows = [n.model_dump() for n in normalized]
-    stmt = insert(Article.__table__).values(rows)
-    update_cols = {col: getattr(stmt.excluded, col) for col in _UPSERT_COLUMNS}
-    update_cols["updated_at"] = func.now()
-    stmt = stmt.on_conflict_do_update(index_elements=["guid"], set_=update_cols).returning(Article.id)
-    result = session.execute(stmt)
-    return [row[0] for row in result.fetchall()]
+def _lock_name(source: NewsSource) -> str:
+    return f"lock:fetch:{source.id}"
 
 
-def _warm_cache(redis_client: "redis.Redis", session, upserted_ids: list) -> None:
-    if not upserted_ids:
-        return
-
-    articles = session.execute(select(Article).where(Article.id.in_(upserted_ids))).scalars().all()
-    pipe = redis_client.pipeline()
-    for article in articles:
-        payload = ArticleOut.model_validate(article).model_dump(mode="json")
-        pipe.set(article_key(article.id), json.dumps(payload), ex=settings.article_cache_ttl_seconds)
-
-    limit = settings.latest_list_default_limit
-    latest = (
-        session.execute(
-            select(Article)
-            .where(Article.source == SOURCE)
-            .order_by(Article.published_at.desc())
-            .limit(limit)
-        )
-        .scalars()
-        .all()
-    )
-    total = session.execute(
-        select(func.count()).select_from(Article).where(Article.source == SOURCE)
-    ).scalar_one()
-
-    listing = ArticleListOut(
-        items=[ArticleOut.model_validate(a) for a in latest],
-        total=total,
-        limit=limit,
-        offset=0,
-    )
-    pipe.set(
-        latest_list_key(SOURCE, limit),
-        listing.model_dump_json(),
-        ex=settings.latest_list_cache_ttl_seconds,
-    )
-    pipe.execute()
+def _fetch_source(client: httpx.Client, redis_client: "redis.Redis", source: NewsSource) -> FetchResult:
+    with try_lock(redis_client, _lock_name(source), settings.fetch_lock_ttl_seconds) as acquired:
+        if not acquired:
+            return FetchResult(acquired=False, raw=None)
+        try:
+            raw = fetch_feed_bytes(client, source.rss_url, settings.feed_fetch_timeout_seconds)
+            return FetchResult(acquired=True, raw=raw)
+        except FeedFetchError as exc:
+            logger.warning("ingest_due_sources: fetch failed for %s: %s", source.name, exc)
+            return FetchResult(acquired=True, raw=None)
 
 
-@celery_app.task(name="worker.tasks.fetch_coindesk_feed")
-def fetch_coindesk_feed() -> None:
+@celery_app.task(name="worker.tasks.ingest_due_sources")
+def ingest_due_sources() -> None:
     redis_client = redis.Redis.from_url(settings.redis_url, decode_responses=True)
 
-    with try_lock(redis_client, FETCH_LOCK_NAME, settings.fetch_lock_ttl_seconds) as acquired:
-        if not acquired:
-            logger.info("fetch_coindesk_feed: skipped, previous run still in progress")
+    with SyncSessionLocal() as session:
+        source_repo = NewsSourceRepository(session)
+        due_sources = source_repo.get_due()
+        if not due_sources:
+            logger.info("ingest_due_sources: no sources due this tick")
             return
 
-        try:
-            raw = fetch_feed_bytes(settings.coindesk_rss_url, settings.feed_fetch_timeout_seconds)
-        except FeedFetchError as exc:
-            logger.warning("fetch_coindesk_feed: fetch failed, will retry on next tick: %s", exc)
-            return
+        # --- Concurrent I/O phase: httpx.Client + redis locks only. The
+        # SQLAlchemy Session is never touched by worker threads — all DB
+        # work happens single-threaded below, after every future resolves.
+        results: dict = {}
+        with httpx.Client() as client, ThreadPoolExecutor(max_workers=settings.ingestion_thread_pool_size) as pool:
+            futures = {pool.submit(_fetch_source, client, redis_client, source): source for source in due_sources}
+            for future in as_completed(futures):
+                source = futures[future]
+                try:
+                    results[source.id] = future.result()
+                except Exception:
+                    logger.exception("ingest_due_sources: unexpected error fetching %s", source.name)
+                    results[source.id] = FetchResult(acquired=False, raw=None)
 
-        parsed = feedparser.parse(raw)
-        if parsed.bozo:
-            logger.warning("fetch_coindesk_feed: feed reported malformed (bozo), attempting best-effort parse")
+        # --- Sequential processing phase: one shared session/transaction
+        # for the whole tick.
+        dedup = DeduplicationService(session)
+        touched_categories: set[str] = set()
+        any_touched = False
 
-        normalized = [n for n in (normalize_entry(e, source=SOURCE) for e in parsed.entries) if n is not None]
-        if not normalized:
-            logger.warning("fetch_coindesk_feed: zero usable entries this tick")
-            return
+        for source in due_sources:
+            result = results.get(source.id)
+            if result is None or not result.acquired:
+                logger.info("ingest_due_sources: %s skipped, previous run still in progress", source.name)
+                continue
 
-        with SyncSessionLocal() as session:
-            upserted_ids = _upsert_articles(session, normalized)
-            session.commit()
-            _warm_cache(redis_client, session, upserted_ids)
+            started_at = time.monotonic()
+            inserted = updated = attached_as_source = parse_failures = entries_seen = 0
+            fetch_failed = result.raw is None
 
-        logger.info(
-            "fetch_coindesk_feed: processed %d/%d entries",
-            len(normalized),
-            len(parsed.entries),
-        )
+            try:
+                if not fetch_failed:
+                    parsed = feedparser.parse(result.raw)
+                    if parsed.bozo:
+                        logger.warning("ingest_due_sources: %s feed reported malformed (bozo)", source.name)
+                    entries_seen = len(parsed.entries)
+                    for entry in parsed.entries:
+                        normalized = normalize_entry(entry, source=source.name)
+                        if normalized is None:
+                            parse_failures += 1
+                            continue
+                        article, outcome = dedup.ingest(normalized, source)
+                        touched_categories.add(article.category)
+                        any_touched = True
+                        if outcome is IngestOutcome.CREATED:
+                            inserted += 1
+                        elif outcome is IngestOutcome.UPDATED:
+                            updated += 1
+                        else:
+                            attached_as_source += 1
+            except Exception:
+                logger.exception(
+                    "ingest_due_sources: unhandled error processing %s, continuing with other sources", source.name
+                )
+            finally:
+                source_repo.mark_fetched(source.id)
+
+            duration_ms = round((time.monotonic() - started_at) * 1000, 1)
+            logger.info(
+                "ingest_due_sources: source=%s duration_ms=%s fetch_failed=%s entries_seen=%d "
+                "inserted=%d updated=%d attached_as_source=%d parse_failures=%d",
+                source.name,
+                duration_ms,
+                fetch_failed,
+                entries_seen,
+                inserted,
+                updated,
+                attached_as_source,
+                parse_failures,
+            )
+
+        session.commit()
+
+        if any_touched:
+            CacheRefreshService(session, redis_client).refresh(touched_categories=touched_categories)

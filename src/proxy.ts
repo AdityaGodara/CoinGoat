@@ -1,10 +1,15 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 import { categories } from "@/data/categories";
-import { articles } from "@/data/articles";
 
 const KNOWN_CATEGORY_SLUGS = new Set(categories.map((category) => category.slug));
-const KNOWN_TAG_SLUGS = new Set(articles.flatMap((article) => article.tags));
+// Backend articles carry a single normalized category, not a free-tag list —
+// tags are set to `[categorySlug]` in src/lib/api/backend/transform.ts, so
+// the only tags that can ever exist are these same category slugs. Reusing
+// the static category set here (rather than deriving tags from live article
+// data) keeps this Edge-runtime check synchronous — it can't easily await a
+// backend fetch at module scope the way an async page component can.
+const KNOWN_TAG_SLUGS = KNOWN_CATEGORY_SLUGS;
 
 // /category and /tag pages read `searchParams` for pagination, which forces
 // fully-dynamic rendering. In that mode Next locks the response to a 200

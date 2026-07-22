@@ -13,9 +13,9 @@ celery_app = Celery(
 
 celery_app.conf.timezone = "UTC"
 celery_app.conf.beat_schedule = {
-    "fetch-coindesk-feed": {
-        "task": "worker.tasks.fetch_coindesk_feed",
-        "schedule": settings.poll_interval_seconds,
+    "ingest-due-sources": {
+        "task": "worker.tasks.ingest_due_sources",
+        "schedule": settings.beat_tick_seconds,
     },
 }
 

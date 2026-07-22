@@ -1,6 +1,6 @@
 import { getFeaturedArticle, getLatestArticles, getTrendingArticles, getArticlesByCategory } from "@/lib/api/articles";
 import { getCryptoAssets } from "@/lib/api/crypto";
-import { getCategoryBySlug } from "@/data/categories";
+import { getCategoryBySlug } from "@/lib/api/categories";
 import { Container } from "@/components/ui/container";
 import { Hero } from "@/components/homepage/hero";
 import { HeroSecondary } from "@/components/homepage/hero-secondary";
@@ -10,22 +10,28 @@ import { CategoryHighlightSection } from "@/components/homepage/category-highlig
 import { MarketsSnapshot } from "@/components/homepage/markets-snapshot";
 import { NewsletterCTA } from "@/components/homepage/newsletter-cta";
 
+export const revalidate = 60;
+
 export default async function Home() {
-  const [featured, latestPool, trending, assets, defiArticles, nftArticles] = await Promise.all([
-    getFeaturedArticle(),
-    getLatestArticles(10),
-    getTrendingArticles(5),
-    getCryptoAssets(),
-    getArticlesByCategory("defi", 1, 4),
-    getArticlesByCategory("nfts", 1, 3),
-  ]);
+  const [featured, latestPool, trending, assets, defiArticles, nftArticles, defiCategory, nftCategory] =
+    await Promise.all([
+      getFeaturedArticle(),
+      getLatestArticles(10),
+      getTrendingArticles(5),
+      getCryptoAssets(),
+      getArticlesByCategory("defi", 1, 4),
+      getArticlesByCategory("nfts", 1, 3),
+      getCategoryBySlug("defi"),
+      getCategoryBySlug("nfts"),
+    ]);
 
   const nonFeatured = latestPool.filter((article) => article.id !== featured?.id);
   const secondary = nonFeatured.slice(0, 3);
   const latestForGrid = nonFeatured.slice(3, 9);
 
-  const defiCategory = getCategoryBySlug("defi")!;
-  const nftCategory = getCategoryBySlug("nfts")!;
+  if (!defiCategory || !nftCategory) {
+    throw new Error("Expected 'defi' and 'nfts' categories to exist in the fixed category taxonomy");
+  }
 
   return (
     <Container className="space-y-16 py-8">

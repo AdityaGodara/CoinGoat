@@ -14,11 +14,20 @@ class Settings(BaseSettings):
 
     redis_url: str = "redis://redis:6379/0"
 
-    coindesk_rss_url: str = "https://www.coindesk.com/arc/outboundfeeds/rss/"
-    poll_interval_seconds: int = 30
+    beat_tick_seconds: int = 60
+    default_fetch_interval_seconds: int = 300
+    ingestion_thread_pool_size: int = 8
+    feed_fetch_max_attempts: int = 2
+    feed_fetch_retry_backoff_seconds: float = 1.0
+
     article_cache_ttl_seconds: int = 600
     latest_list_cache_ttl_seconds: int = 60
     latest_list_default_limit: int = 20
+    homepage_cache_ttl_seconds: int = 60
+    featured_cache_ttl_seconds: int = 90
+    trending_cache_ttl_seconds: int = 90
+    category_list_cache_ttl_seconds: int = 180
+
     fetch_lock_ttl_seconds: int = 25
     feed_fetch_timeout_seconds: int = 10
 

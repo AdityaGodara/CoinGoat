@@ -1,7 +1,6 @@
 import { notFound } from "next/navigation";
 import type { Metadata } from "next";
-import { getAuthorBySlug, getArticlesByAuthor } from "@/lib/api/authors";
-import { authors } from "@/data/authors";
+import { getAuthorBySlug, getArticlesByAuthor, getAuthors } from "@/lib/api/authors";
 import { Container } from "@/components/ui/container";
 import { Avatar } from "@/components/ui/avatar";
 import { ArticleCard } from "@/components/shared/article-card";
@@ -14,10 +13,15 @@ interface AuthorPageProps {
 }
 
 export async function generateStaticParams() {
+  // Backend bylines are derived from recent articles, not a fixed roster
+  // (see src/lib/api/authors.ts) — this pre-warms whoever appears in that
+  // snapshot; `dynamicParams` stays at its default (true) so any other real
+  // byline still resolves on demand instead of 404ing.
+  const authors = await getAuthors();
   return authors.map((author) => ({ authorSlug: author.slug }));
 }
 
-export const dynamicParams = false;
+export const revalidate = 60;
 
 export async function generateMetadata({ params }: AuthorPageProps): Promise<Metadata> {
   const { authorSlug } = await params;

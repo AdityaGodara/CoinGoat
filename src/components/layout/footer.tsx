@@ -1,11 +1,13 @@
 import Link from "next/link";
 import { Container } from "@/components/ui/container";
 import { Reveal } from "@/components/motion/reveal";
-import { categories } from "@/data/categories";
+import { getCategories } from "@/lib/api/categories";
 import { NewsletterForm } from "@/components/shared/newsletter-form";
 import { TwitterIcon, LinkedinIcon, WebsiteIcon } from "@/components/ui/icons";
 
-export function Footer() {
+export async function Footer() {
+  const categories = await getCategories();
+
   return (
     <footer className="border-t border-border bg-surface">
       <Reveal>

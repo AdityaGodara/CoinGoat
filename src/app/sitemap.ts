@@ -1,11 +1,13 @@
 import type { MetadataRoute } from "next";
-import { articles } from "@/data/articles";
-import { categories } from "@/data/categories";
-import { authors } from "@/data/authors";
+import { getArticles } from "@/lib/api/articles";
+import { getCategories } from "@/lib/api/categories";
+import { getAuthors } from "@/lib/api/authors";
 
 const BASE_URL = "https://coingoat.example";
 
-export default function sitemap(): MetadataRoute.Sitemap {
+export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
+  const [articles, categories, authors] = await Promise.all([getArticles(), getCategories(), getAuthors()]);
+
   const articleEntries: MetadataRoute.Sitemap = articles.map((article) => ({
     url: `${BASE_URL}/news/${article.slug}`,
     lastModified: article.updatedAt ?? article.publishedAt,

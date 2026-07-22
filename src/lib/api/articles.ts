@@ -1,11 +1,12 @@
-import { articles } from "@/data/articles";
 import type { Article } from "@/types";
+import { fetchFromBackend, fetchFromBackendOrNull } from "./backend/client";
+import { backendCategoryUrlSlug, FRONTEND_TO_BACKEND_CATEGORIES } from "./backend/category-map";
+import { mapBackendArticle, mapBackendSummary } from "./backend/transform";
+import type { BackendArticle, BackendArticleList, BackendHomepage } from "./backend/types";
 
 const DEFAULT_PAGE_SIZE = 9;
-
-function byNewest(a: Article, b: Article): number {
-  return new Date(b.publishedAt).getTime() - new Date(a.publishedAt).getTime();
-}
+const ARTICLES_POOL_LIMIT = 100;
+const AGGREGATE_CATEGORY_FETCH_LIMIT = 100;
 
 export interface PaginatedResult<T> {
   items: T[];
@@ -15,55 +16,64 @@ export interface PaginatedResult<T> {
   totalPages: number;
 }
 
-function paginate<T>(items: T[], page: number, pageSize: number): PaginatedResult<T> {
-  const total = items.length;
-  const totalPages = Math.max(1, Math.ceil(total / pageSize));
-  const safePage = Math.min(Math.max(1, page), totalPages);
-  const start = (safePage - 1) * pageSize;
-  return {
-    items: items.slice(start, start + pageSize),
-    total,
-    page: safePage,
-    pageSize,
-    totalPages,
-  };
+function emptyPaginatedResult<T>(page: number, pageSize: number): PaginatedResult<T> {
+  return { items: [], total: 0, page, pageSize, totalPages: 1 };
+}
+
+function mapArticleList(data: BackendArticleList): Article[] {
+  return data.items.map((raw, index) => mapBackendArticle(raw, index + 1));
 }
 
 export async function getArticles(): Promise<Article[]> {
-  return [...articles].sort(byNewest);
+  const data = await fetchFromBackend<BackendArticleList>(`/api/latest?limit=${ARTICLES_POOL_LIMIT}&offset=0`);
+  return mapArticleList(data);
 }
 
 export async function getPaginatedArticles(
   page = 1,
   pageSize = DEFAULT_PAGE_SIZE,
 ): Promise<PaginatedResult<Article>> {
-  const sorted = [...articles].sort(byNewest);
-  return paginate(sorted, page, pageSize);
+  const safePage = Math.max(1, page);
+  const offset = (safePage - 1) * pageSize;
+  const data = await fetchFromBackend<BackendArticleList>(`/api/latest?limit=${pageSize}&offset=${offset}`);
+  return {
+    items: mapArticleList(data),
+    total: data.total,
+    page: safePage,
+    pageSize,
+    totalPages: Math.max(1, Math.ceil(data.total / pageSize)),
+  };
 }
 
 export async function getArticleBySlug(slug: string): Promise<Article | undefined> {
-  return articles.find((article) => article.slug === slug);
+  const raw = await fetchFromBackendOrNull<BackendArticle>(`/api/article/${encodeURIComponent(slug)}`);
+  if (!raw) return undefined;
+  return mapBackendArticle(raw, 1);
 }
 
 export async function getFeaturedArticle(): Promise<Article | undefined> {
-  return articles.find((article) => article.featured);
+  const homepage = await fetchFromBackend<BackendHomepage>("/api/homepage");
+  if (!homepage.featured) return undefined;
+  return mapBackendSummary(homepage.featured, 1);
 }
 
 export async function getBreakingArticles(): Promise<Article[]> {
-  return articles.filter((article) => article.breaking).sort(byNewest);
+  // The backend has no editorial "breaking" flag for RSS-sourced content —
+  // this is a recency proxy, same honest limitation as `getTrendingArticles`.
+  const homepage = await fetchFromBackend<BackendHomepage>("/api/homepage");
+  return homepage.latest.slice(0, 5).map((raw, index) => mapBackendSummary(raw, index + 1));
 }
 
 export async function getLatestArticles(limit = 6): Promise<Article[]> {
-  return [...articles].sort(byNewest).slice(0, limit);
+  const data = await fetchFromBackend<BackendArticleList>(`/api/latest?limit=${limit}&offset=0`);
+  return mapArticleList(data);
 }
 
 export async function getTrendingArticles(limit = 5): Promise<Article[]> {
-  // No real analytics yet, so approximate "trending" as the most recent
-  // non-featured articles so the homepage trending rail differs from Latest.
-  return [...articles]
-    .filter((article) => !article.featured)
-    .sort(byNewest)
-    .slice(0, limit);
+  // No real engagement analytics exist for RSS-sourced content — trending is
+  // the same recency proxy the backend itself uses, just a different slice.
+  const homepage = await fetchFromBackend<BackendHomepage>("/api/homepage");
+  return homepage.trending.slice(0, limit).map((raw, index) => mapBackendSummary(raw, index + 1));
 }
 
 export async function getArticlesByCategory(
@@ -71,10 +81,58 @@ export async function getArticlesByCategory(
   page = 1,
   pageSize = DEFAULT_PAGE_SIZE,
 ): Promise<PaginatedResult<Article>> {
-  const filtered = articles
-    .filter((article) => article.category.slug === categorySlug)
-    .sort(byNewest);
-  return paginate(filtered, page, pageSize);
+  const backendCategoryNames = FRONTEND_TO_BACKEND_CATEGORIES[categorySlug];
+  if (!backendCategoryNames || backendCategoryNames.length === 0) {
+    return emptyPaginatedResult(page, pageSize);
+  }
+
+  const safePage = Math.max(1, page);
+
+  if (backendCategoryNames.length === 1) {
+    const backendSlug = backendCategoryUrlSlug(backendCategoryNames[0]);
+    const offset = (safePage - 1) * pageSize;
+    const data = await fetchFromBackendOrNull<BackendArticleList>(
+      `/api/category/${backendSlug}?limit=${pageSize}&offset=${offset}`,
+    );
+    if (!data) return emptyPaginatedResult(safePage, pageSize);
+    return {
+      items: mapArticleList(data),
+      total: data.total,
+      page: safePage,
+      pageSize,
+      totalPages: Math.max(1, Math.ceil(data.total / pageSize)),
+    };
+  }
+
+  // A handful of frontend categories aggregate more than one backend
+  // category (see backend/category-map.ts). There's no single backend
+  // endpoint for "any of these categories," so each is fetched in full and
+  // merged/re-sorted/re-paginated here. `total`/`totalPages` are therefore
+  // an approximation bounded by how much of each category was fetched, not
+  // a true count — acceptable for a handful of secondary categories.
+  const lists = await Promise.all(
+    backendCategoryNames.map((name) =>
+      fetchFromBackendOrNull<BackendArticleList>(
+        `/api/category/${backendCategoryUrlSlug(name)}?limit=${AGGREGATE_CATEGORY_FETCH_LIMIT}&offset=0`,
+      ),
+    ),
+  );
+  const merged = lists
+    .filter((list): list is BackendArticleList => list !== null)
+    .flatMap((list) => list.items)
+    .sort((a, b) => new Date(b.published_at).getTime() - new Date(a.published_at).getTime());
+
+  const total = merged.length;
+  const start = (safePage - 1) * pageSize;
+  const pageItems = merged.slice(start, start + pageSize);
+
+  return {
+    items: pageItems.map((raw, index) => mapBackendArticle(raw, index + 1)),
+    total,
+    page: safePage,
+    pageSize,
+    totalPages: Math.max(1, Math.ceil(total / pageSize)),
+  };
 }
 
 export async function getArticlesByTag(
@@ -82,48 +140,24 @@ export async function getArticlesByTag(
   page = 1,
   pageSize = DEFAULT_PAGE_SIZE,
 ): Promise<PaginatedResult<Article>> {
-  const filtered = articles.filter((article) => article.tags.includes(tag)).sort(byNewest);
-  return paginate(filtered, page, pageSize);
+  // Backend articles carry a single normalized category, not a free-tag
+  // list — tags are set to `[categorySlug]` in the transform layer, so a
+  // tag page is functionally the same lookup as a category page today.
+  return getArticlesByCategory(tag, page, pageSize);
 }
 
 export async function getRelatedArticles(article: Article, limit = 3): Promise<Article[]> {
-  const scored = articles
-    .filter((candidate) => candidate.slug !== article.slug)
-    .map((candidate) => {
-      const sharedTags = candidate.tags.filter((tag) => article.tags.includes(tag)).length;
-      const sameCategory = candidate.category.slug === article.category.slug ? 1 : 0;
-      return { candidate, score: sharedTags * 2 + sameCategory };
-    })
-    .filter((entry) => entry.score > 0)
-    .sort((a, b) => b.score - a.score || byNewest(a.candidate, b.candidate));
-
-  const related = scored.map((entry) => entry.candidate);
-  if (related.length < limit) {
-    const fallback = articles
-      .filter((candidate) => candidate.slug !== article.slug && !related.includes(candidate))
-      .sort(byNewest);
-    related.push(...fallback.slice(0, limit - related.length));
-  }
-  return related.slice(0, limit);
+  const sameCategory = await getArticlesByCategory(article.category.slug, 1, limit + 3);
+  return sameCategory.items.filter((candidate) => candidate.slug !== article.slug).slice(0, limit);
 }
 
 export async function searchArticles(query: string): Promise<Article[]> {
-  const normalized = query.trim().toLowerCase();
+  const normalized = query.trim();
   if (!normalized) return [];
-  return articles
-    .filter((article) => {
-      const haystack = [
-        article.title,
-        article.excerpt,
-        article.category.name,
-        ...article.tags,
-        article.author.name,
-      ]
-        .join(" ")
-        .toLowerCase();
-      return haystack.includes(normalized);
-    })
-    .sort(byNewest);
+  const data = await fetchFromBackend<BackendArticleList>(
+    `/api/search?q=${encodeURIComponent(normalized)}&limit=50&offset=0`,
+  );
+  return mapArticleList(data);
 }
 
 export async function getSearchSuggestions(query: string, limit = 5): Promise<Article[]> {

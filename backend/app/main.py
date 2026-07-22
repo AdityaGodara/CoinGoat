@@ -2,7 +2,7 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 
-from app.api.routers import articles, health
+from app.api.routers import articles, health, homepage
 from app.core.config import settings
 from app.core.logging import configure_logging
 from app.core.redis import close_redis_pool
@@ -21,4 +21,5 @@ async def lifespan(app: FastAPI):
 app = FastAPI(title="CoinGoat RSS API", lifespan=lifespan)
 
 app.include_router(health.router)
+app.include_router(homepage.router)
 app.include_router(articles.router)

@@ -1,4 +1,5 @@
 import ReactMarkdown from "react-markdown";
+import rehypeRaw from "rehype-raw";
 import rehypeSlug from "rehype-slug";
 import type { Components } from "react-markdown";
 import { LightboxImage } from "./lightbox-image";
@@ -18,7 +19,10 @@ const components: Components = {
 export function ArticleBody({ content }: { content: string }) {
   return (
     <div className="prose-article max-w-none">
-      <ReactMarkdown rehypePlugins={[rehypeSlug]} components={components}>
+      {/* rehypeRaw runs first to parse raw HTML (backend articles store
+          sanitized HTML, not markdown, in `content`) into real elements;
+          rehypeSlug then adds heading ids to whatever came out of that. */}
+      <ReactMarkdown rehypePlugins={[rehypeRaw, rehypeSlug]} components={components}>
         {content}
       </ReactMarkdown>
     </div>

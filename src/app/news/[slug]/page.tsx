@@ -21,13 +21,16 @@ interface ArticlePageProps {
 }
 
 export async function generateStaticParams() {
+  // Pre-warms the most recent ~100 articles at build time; the backend's
+  // catalog is large and growing every ingestion tick, so (unlike the old
+  // fully-enumerable mock catalog) this is a snapshot, not the full set.
+  // `dynamicParams` stays at its default (true) so any other real slug
+  // still renders correctly on demand instead of 404ing.
   const articles = await getArticles();
   return articles.map((article) => ({ slug: article.slug }));
 }
 
-// All slugs are fully enumerable from mock data above, so reject anything
-// else at the routing layer with a real 404 instead of a streamed 200.
-export const dynamicParams = false;
+export const revalidate = 60;
 
 export async function generateMetadata({ params }: ArticlePageProps): Promise<Metadata> {
   const { slug } = await params;

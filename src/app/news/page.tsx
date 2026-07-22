@@ -9,6 +9,8 @@ export const metadata: Metadata = {
   title: "Latest News",
 };
 
+export const revalidate = 60;
+
 interface NewsPageProps {
   searchParams: Promise<{ page?: string }>;
 }

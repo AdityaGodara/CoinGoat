@@ -1,7 +1,7 @@
 import { notFound } from "next/navigation";
 import type { Metadata } from "next";
 import { getArticlesByCategory } from "@/lib/api/articles";
-import { getCategoryBySlug, categories } from "@/data/categories";
+import { getCategoryBySlug, getCategories } from "@/lib/api/categories";
 import { Container } from "@/components/ui/container";
 import { ArticleCard } from "@/components/shared/article-card";
 import { Pagination } from "@/components/shared/pagination";
@@ -14,21 +14,23 @@ interface CategoryPageProps {
 }
 
 export async function generateStaticParams() {
+  const categories = await getCategories();
   return categories.map((category) => ({ category: category.slug }));
 }
 
 export const dynamicParams = false;
+export const revalidate = 60;
 
 export async function generateMetadata({ params }: CategoryPageProps): Promise<Metadata> {
   const { category: slug } = await params;
-  const category = getCategoryBySlug(slug);
+  const category = await getCategoryBySlug(slug);
   if (!category) return {};
   return { title: category.name, description: category.description };
 }
 
 export default async function CategoryPage({ params, searchParams }: CategoryPageProps) {
   const { category: slug } = await params;
-  const category = getCategoryBySlug(slug);
+  const category = await getCategoryBySlug(slug);
   if (!category) notFound();
 
   const { page: pageParam } = await searchParams;

@@ -18,6 +18,7 @@ export async function generateStaticParams() {
 }
 
 export const dynamicParams = false;
+export const revalidate = 60;
 
 export async function generateMetadata({ params }: TagPageProps): Promise<Metadata> {
   const { tag } = await params;

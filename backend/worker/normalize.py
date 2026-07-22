@@ -1,9 +1,15 @@
 import logging
 from datetime import datetime, timezone
 
+import nh3
+
 from app.schemas.article import NormalizedArticle
+from app.services.category_normalizer import CategoryNormalizer
+from app.services.deduplication import normalize_url
 
 logger = logging.getLogger(__name__)
+
+_category_normalizer = CategoryNormalizer()
 
 
 def _extract_image_url(entry) -> str | None:
@@ -22,14 +28,15 @@ def _extract_image_url(entry) -> str | None:
     return None
 
 
-def _extract_content_html(entry) -> str | None:
+def _extract_content(entry) -> str | None:
     content = getattr(entry, "content", None)
     if not content:
         return None
     try:
-        return content[0].value
+        raw_html = content[0].value
     except (AttributeError, IndexError, TypeError):
         return None
+    return nh3.clean(raw_html) if raw_html else None
 
 
 def _extract_categories(entry) -> list[str]:
@@ -54,44 +61,49 @@ def _extract_published_at(entry, guid: str) -> datetime:
     return datetime.now(timezone.utc)
 
 
-def normalize_entry(entry, *, source: str = "coindesk") -> NormalizedArticle | None:
+def normalize_entry(entry, *, source: str) -> NormalizedArticle | None:
     """Map one feedparser entry onto our schema. Never raises — a single
     malformed item is logged and skipped (returns None) rather than
-    crashing the whole ingestion tick."""
+    crashing the whole ingestion tick. `source` is the owning NewsSource's
+    name, used only for logging/raw_payload here — dedup attribution goes
+    through app.services.deduplication, not this function."""
 
     guid = getattr(entry, "id", None) or getattr(entry, "link", None)
     if not guid:
-        logger.warning("normalize_entry: dropping entry with neither guid nor link: %r", entry)
+        logger.warning("normalize_entry: dropping entry with neither guid nor link (source=%s): %r", source, entry)
         return None
 
     link = getattr(entry, "link", None) or guid
     title = (getattr(entry, "title", "") or "").strip() or "(untitled)"
     summary = getattr(entry, "summary", None)
     author = getattr(entry, "author", None)
-    categories = _extract_categories(entry)
-    content_html = _extract_content_html(entry)
+    raw_categories = _extract_categories(entry)
+    content = _extract_content(entry)
     image_url = _extract_image_url(entry)
     published_at = _extract_published_at(entry, guid)
+    category = _category_normalizer.classify(title=title, summary=summary, categories=raw_categories)
+    canonical_url = normalize_url(link)
 
     return NormalizedArticle(
-        guid=guid,
-        link=link,
-        source=source,
+        external_guid=guid,
+        original_url=link,
+        canonical_url=canonical_url,
         title=title,
         summary=summary,
-        content_html=content_html,
+        content=content,
         author=author,
-        categories=categories,
+        category=category,
         image_url=image_url,
         published_at=published_at,
         raw_payload={
-            "guid": guid,
-            "link": link,
+            "external_guid": guid,
+            "original_url": link,
             "source": source,
             "title": title,
             "summary": summary,
             "author": author,
-            "categories": categories,
+            "raw_categories": raw_categories,
+            "category": category,
             "image_url": image_url,
             "published_at": published_at.isoformat(),
         },
