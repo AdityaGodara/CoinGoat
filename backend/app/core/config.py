@@ -1,6 +1,20 @@
 from urllib.parse import quote
 
+from pydantic import BaseModel, Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+
+class RssFeedSourceConfig(BaseModel):
+    """One entry of the `RSS_FEED_SOURCES` env var — see .env.example.
+    `fetch_interval_seconds`/`is_active` are optional per-entry overrides;
+    omitting them falls back to `default_fetch_interval_seconds`/active."""
+
+    name: str
+    rss_url: str
+    website_url: str
+    priority: int = 0
+    fetch_interval_seconds: int | None = None
+    is_active: bool = True
 
 
 class Settings(BaseSettings):
@@ -16,6 +30,11 @@ class Settings(BaseSettings):
 
     beat_tick_seconds: int = 60
     default_fetch_interval_seconds: int = 300
+    # JSON array in the env file — see .env.example. This is the source of
+    # truth for *which feeds exist*; `scripts/seed_news_sources.py` upserts
+    # it into the `news_sources` table, which still owns runtime state
+    # (is_active, last_fetched_at) that this list doesn't touch after seeding.
+    rss_feed_sources: list[RssFeedSourceConfig] = Field(default_factory=list)
     ingestion_thread_pool_size: int = 8
     feed_fetch_max_attempts: int = 2
     feed_fetch_retry_backoff_seconds: float = 1.0

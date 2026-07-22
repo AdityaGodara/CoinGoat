@@ -22,6 +22,7 @@ WORKDIR /app
 
 COPY app ./app
 COPY worker ./worker
+COPY scripts ./scripts
 COPY alembic.ini ./
 COPY alembic ./alembic
 

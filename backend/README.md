@@ -11,14 +11,24 @@ serves reads with cache-aside fallback to Postgres on a miss.
 This is a backend-only pipeline. Nothing under the repo's `src/` (the Next.js
 frontend) depends on or is changed by this service yet.
 
-Sources are database rows (`news_sources` table), not hardcoded — adding a
-new feed is an `INSERT`, not a code change. Seeded today: CoinDesk,
-Cointelegraph, Decrypt, Bitcoin Magazine, Ethereum Foundation, Solana,
-Arbitrum (Offchain Labs), and Kraken Blog — the 8 sources with a verified,
-currently-working public RSS feed at the time this was built. (Binance,
-Coinbase, Polygon, and Chainlink were evaluated but have no working public
-feed today; add them the same way — an `INSERT` into `news_sources` — if
-they ever ship one.)
+Sources are database rows (`news_sources` table) — fetch scheduling
+(`is_active`, `fetch_interval_seconds`, `last_fetched_at`) lives there, not
+in code. The *list of feeds* itself is configured in `.env`'s
+`RSS_FEED_SOURCES` (a JSON array of `{name, rss_url, website_url, priority,
+...}`), and the one-shot `seed-sources` compose service (`scripts/
+seed_news_sources.py`) upserts that list into `news_sources` — matched by
+`name` — on every `docker compose up`. To add, repoint, or deactivate a
+feed: edit `RSS_FEED_SOURCES` and re-run `docker compose up` (or `docker
+compose run --rm seed-sources` on its own). Removing an entry from the env
+var does *not* delete its DB row — set `"is_active": false` instead if you
+want it to stop being fetched without losing its ingestion history.
+
+Seeded today: CoinDesk, Cointelegraph, Decrypt, Bitcoin Magazine, Ethereum
+Foundation, Solana, Arbitrum (Offchain Labs), and Kraken Blog — the 8
+sources with a verified, currently-working public RSS feed at the time this
+was built. (Binance, Coinbase, Polygon, and Chainlink were evaluated but
+have no working public feed today; add them to `RSS_FEED_SOURCES` the same
+way if they ever ship one.)
 
 The frontend never learns which source an article came from — `article_sources`
 (per-source guid/URL/raw payload, supporting multi-publisher attribution of

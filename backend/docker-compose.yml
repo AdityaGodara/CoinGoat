@@ -30,6 +30,14 @@ services:
       postgres:
         condition: service_healthy
 
+  seed-sources:
+    build: .
+    env_file: .env
+    command: ["python", "-m", "scripts.seed_news_sources"]
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+
   api:
     build: .
     env_file: .env
@@ -41,7 +49,7 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
-      migrate:
+      seed-sources:
         condition: service_completed_successfully
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/healthz"]
@@ -58,7 +66,7 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
-      migrate:
+      seed-sources:
         condition: service_completed_successfully
 
   beat:
@@ -70,7 +78,7 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
-      migrate:
+      seed-sources:
         condition: service_completed_successfully
 
 volumes:
