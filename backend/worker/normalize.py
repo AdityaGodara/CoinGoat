@@ -1,4 +1,5 @@
 import logging
+import re
 from datetime import datetime, timezone
 
 import nh3
@@ -10,6 +11,15 @@ from app.services.deduplication import normalize_url
 logger = logging.getLogger(__name__)
 
 _category_normalizer = CategoryNormalizer()
+
+_IMG_SRC_PATTERN = re.compile(r'<img[^>]+src=["\']([^"\']+)["\']', re.IGNORECASE)
+
+
+def _first_img_src(html: str | None) -> str | None:
+    if not html:
+        return None
+    match = _IMG_SRC_PATTERN.search(html)
+    return match.group(1) if match else None
 
 
 def _extract_image_url(entry) -> str | None:
@@ -25,7 +35,14 @@ def _extract_image_url(entry) -> str | None:
         if rel == "enclosure" and link_type and link_type.startswith("image/"):
             return link.get("href")
 
-    return None
+    # Some feeds (e.g. Bitcoin Magazine's WordPress feed) provide neither
+    # media:content nor an enclosure link — the cover image is just the
+    # first <img> embedded directly in the entry's own HTML body/summary.
+    try:
+        raw_content_html = entry.content[0].value
+    except (AttributeError, IndexError, TypeError):
+        raw_content_html = None
+    return _first_img_src(raw_content_html) or _first_img_src(getattr(entry, "summary", None))
 
 
 def _extract_content(entry) -> str | None:

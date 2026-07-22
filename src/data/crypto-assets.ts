@@ -93,12 +93,15 @@ export const cryptoAssets: CryptoAsset[] = [
     sparkline: generateSparkline(14, 0.5),
   },
   {
-    symbol: "MATIC",
-    name: "Polygon",
+    // MATIC fully migrated to POL on-chain — matches the real CoinGecko
+    // roster (src/lib/api/coingecko/coins.ts), which tracks the live
+    // successor token rather than the now-defunct "matic-network" id.
+    symbol: "POL",
+    name: "POL (ex-MATIC)",
     logo: "/images/logos/matic.svg",
-    price: 0.721,
-    change24hPct: -0.67,
-    sparkline: generateSparkline(0.72, 0.03),
+    price: 0.0788,
+    change24hPct: -2.01,
+    sparkline: generateSparkline(0.08, 0.003),
   },
   {
     symbol: "LTC",

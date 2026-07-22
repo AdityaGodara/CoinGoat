@@ -110,7 +110,12 @@ class DeduplicationService:
         if is_richer(normalized.content, article.content):
             article.content = normalized.content
             article.summary = normalized.summary or article.summary
-            article.image_url = normalized.image_url or article.image_url
+        # Backfilling a missing image shouldn't depend on content having
+        # gotten richer — e.g. a normalizer fix that starts extracting
+        # images it previously missed should apply on the next re-fetch of
+        # an already-ingested article, even though its content is unchanged.
+        if not article.image_url and normalized.image_url:
+            article.image_url = normalized.image_url
         return article
 
     def _attach_source(self, article: Article, normalized: NormalizedArticle, source: NewsSource) -> None:
