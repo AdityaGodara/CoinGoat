@@ -34,6 +34,26 @@ function readingTimeFor(summary: string | null, content: string | null): number 
   return Math.max(1, Math.round(words / WORDS_PER_MINUTE));
 }
 
+// RSS content commonly embeds its own cover image inline (often literally
+// where `image_url` was scraped from, see backend's `_extract_image_url`
+// fallback) — since the article page already renders `coverImage` big up
+// top, leaving it in `content` too shows the same photo twice. Strips only
+// the first occurrence whose `src` matches the cover image, and unwraps its
+// containing <figure>/<p> if that's all the block held, so no dangling
+// empty wrapper (or stray caption) is left behind.
+function stripDuplicateCoverImage(html: string, imageUrl: string): string {
+  const escaped = imageUrl.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const imgPattern = `<img[^>]*src=["']${escaped}["'][^>]*/?>`;
+
+  const figureMatch = html.match(new RegExp(`<figure[^>]*>\\s*${imgPattern}[\\s\\S]*?</figure>`, "i"));
+  if (figureMatch) return html.replace(figureMatch[0], "");
+
+  const paragraphMatch = html.match(new RegExp(`<p[^>]*>\\s*${imgPattern}\\s*</p>`, "i"));
+  if (paragraphMatch) return html.replace(paragraphMatch[0], "");
+
+  return html.replace(new RegExp(imgPattern, "i"), "");
+}
+
 function coverImageFor(imageUrl: string | null, title: string, index: number): ArticleImage {
   if (imageUrl) {
     return { src: imageUrl, alt: title, width: 1200, height: 630 };
@@ -68,12 +88,13 @@ export function mapBackendSummary(raw: BackendArticleSummary, index = 1): Articl
 
 export function mapBackendArticle(raw: BackendArticle, index = 1): Article {
   const category = categoryFor(raw.category);
+  const content = raw.image_url ? stripDuplicateCoverImage(raw.content ?? "", raw.image_url) : (raw.content ?? "");
   return {
     id: raw.id,
     slug: raw.slug,
     title: raw.title,
     excerpt: excerptFor(raw.summary, raw.content),
-    content: raw.content ?? "",
+    content,
     coverImage: coverImageFor(raw.image_url, raw.title, index),
     category,
     tags: [category.slug],

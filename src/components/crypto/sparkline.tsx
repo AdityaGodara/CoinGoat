@@ -1,6 +1,6 @@
 export function Sparkline({
   data,
-  width = 80,
+  width = 300,
   height = 28,
   className,
 }: {
@@ -23,7 +23,17 @@ export function Sparkline({
   const trendUp = data[data.length - 1] >= data[0];
 
   return (
-    <svg width={width} height={height} viewBox={`0 0 ${width} ${height}`} className={className} aria-hidden="true">
+    // `width`/`height` here are just the internal coordinate space the
+    // points above are plotted in — the rendered size is controlled by the
+    // CSS on the element itself (see callers), scaled via viewBox.
+    <svg
+      width="100%"
+      height={height}
+      viewBox={`0 0 ${width} ${height}`}
+      preserveAspectRatio="none"
+      className={className}
+      aria-hidden="true"
+    >
       <polyline
         points={points.join(" ")}
         fill="none"
