@@ -1,0 +1,139 @@
+databases:
+  - name: coingoat-db
+    databaseName: coingoat
+    user: coingoat
+    plan: basic-256mb
+    postgresMajorVersion: "16"
+
+services:
+  # Render's Redis-compatible store. Render has renamed this product a
+  # couple of times ("Redis" -> "Key Value") — if `type: keyvalue` is
+  # rejected by the Blueprint parser, check the current type name in
+  # Render's docs and swap it in; everything downstream only depends on
+  # the `connectionString` property below, not the type name itself.
+  - type: keyvalue
+    name: coingoat-redis
+    plan: free
+    ipAllowList: []
+
+  - type: web
+    name: coingoat-api
+    runtime: docker
+    plan: starter
+    rootDir: backend
+    dockerfilePath: ./Dockerfile
+    dockerContext: .
+    healthCheckPath: /healthz
+    # Runs the migration + one-shot source seed before the API starts
+    # serving traffic. Safe to re-run every deploy: `alembic upgrade head`
+    # is a no-op once the schema is current, and seed_news_sources upserts
+    # by name (see backend/scripts/seed_news_sources.py).
+    dockerCommand: "sh -c \"alembic upgrade head && python -m scripts.seed_news_sources && uvicorn app.main:app --host 0.0.0.0 --port $PORT\""
+    envVars:
+      - key: POSTGRES_HOST
+        fromDatabase:
+          name: coingoat-db
+          property: host
+      - key: POSTGRES_PORT
+        fromDatabase:
+          name: coingoat-db
+          property: port
+      - key: POSTGRES_DB
+        fromDatabase:
+          name: coingoat-db
+          property: database
+      - key: POSTGRES_USER
+        fromDatabase:
+          name: coingoat-db
+          property: user
+      - key: POSTGRES_PASSWORD
+        fromDatabase:
+          name: coingoat-db
+          property: password
+      - key: REDIS_URL
+        fromService:
+          type: keyvalue
+          name: coingoat-redis
+          property: connectionString
+      - key: RSS_FEED_SOURCES
+        sync: false
+      - key: LOG_LEVEL
+        value: INFO
+
+  - type: worker
+    name: coingoat-worker
+    runtime: docker
+    plan: starter
+    rootDir: backend
+    dockerfilePath: ./Dockerfile
+    dockerContext: .
+    dockerCommand: "celery -A worker.celery_app worker --loglevel=info --concurrency=2"
+    envVars:
+      - key: POSTGRES_HOST
+        fromDatabase:
+          name: coingoat-db
+          property: host
+      - key: POSTGRES_PORT
+        fromDatabase:
+          name: coingoat-db
+          property: port
+      - key: POSTGRES_DB
+        fromDatabase:
+          name: coingoat-db
+          property: database
+      - key: POSTGRES_USER
+        fromDatabase:
+          name: coingoat-db
+          property: user
+      - key: POSTGRES_PASSWORD
+        fromDatabase:
+          name: coingoat-db
+          property: password
+      - key: REDIS_URL
+        fromService:
+          type: keyvalue
+          name: coingoat-redis
+          property: connectionString
+      - key: RSS_FEED_SOURCES
+        sync: false
+      - key: LOG_LEVEL
+        value: INFO
+
+  - type: worker
+    name: coingoat-beat
+    runtime: docker
+    plan: starter
+    rootDir: backend
+    dockerfilePath: ./Dockerfile
+    dockerContext: .
+    dockerCommand: "celery -A worker.celery_app beat --loglevel=info"
+    envVars:
+      - key: POSTGRES_HOST
+        fromDatabase:
+          name: coingoat-db
+          property: host
+      - key: POSTGRES_PORT
+        fromDatabase:
+          name: coingoat-db
+          property: port
+      - key: POSTGRES_DB
+        fromDatabase:
+          name: coingoat-db
+          property: database
+      - key: POSTGRES_USER
+        fromDatabase:
+          name: coingoat-db
+          property: user
+      - key: POSTGRES_PASSWORD
+        fromDatabase:
+          name: coingoat-db
+          property: password
+      - key: REDIS_URL
+        fromService:
+          type: keyvalue
+          name: coingoat-redis
+          property: connectionString
+      - key: RSS_FEED_SOURCES
+        sync: false
+      - key: LOG_LEVEL
+        value: INFO

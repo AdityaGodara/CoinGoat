@@ -1,0 +1,12 @@
+__pycache__/
+*.pyc
+.pytest_cache/
+.venv*/
+celerybeat-schedule
+.env
+.env.example
+.git
+.gitignore
+README.md
+tests/
+coingate/

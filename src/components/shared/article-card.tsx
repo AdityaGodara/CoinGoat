@@ -10,7 +10,7 @@ import type { Article } from "@/types";
 
 interface ArticleCardProps {
   article: Article;
-  variant?: "grid" | "list" | "compact";
+  variant?: "grid" | "list" | "compact" | "sidebar";
   rank?: number;
   priority?: boolean;
 }
@@ -35,6 +35,33 @@ export function ArticleCard({ article, variant = "grid", rank, priority = false 
             {article.title}
           </p>
           <p className="mt-1 text-xs text-muted">{formatRelativeTime(article.publishedAt)}</p>
+        </div>
+      </Link>
+    );
+  }
+
+  if (variant === "sidebar") {
+    return (
+      <Link href={href} className="group flex items-start gap-3 rounded-xl p-2 transition-colors hover:bg-surface-hover">
+        <div className="relative h-16 w-16 shrink-0 overflow-hidden rounded-lg">
+          <Image
+            src={article.coverImage.src}
+            alt={article.coverImage.alt}
+            fill
+            unoptimized
+            className="object-cover transition-transform duration-500 group-hover:scale-105"
+          />
+          {rank !== undefined && (
+            <span className="absolute left-1 top-1 flex h-5 w-5 items-center justify-center rounded-full bg-background/80 text-[10px] font-bold tabular-nums text-foreground backdrop-blur-sm">
+              {rank}
+            </span>
+          )}
+        </div>
+        <div className="min-w-0 flex-1">
+          <p className="line-clamp-2 text-sm font-semibold leading-snug text-foreground transition-colors group-hover:text-accent">
+            {article.title}
+          </p>
+          <p className="mt-1.5 truncate text-xs text-muted">{formatRelativeTime(article.publishedAt)}</p>
         </div>
       </Link>
     );

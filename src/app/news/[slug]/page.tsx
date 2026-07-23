@@ -6,7 +6,6 @@ import { extractHeadings } from "@/lib/utils/markdown";
 import { Container } from "@/components/ui/container";
 import { ArticleHeader } from "@/components/article/article-header";
 import { ArticleBody } from "@/components/article/article-body";
-import { ArticleScrollTracker } from "@/components/article/article-scroll-tracker";
 import { StickyShareBar } from "@/components/article/sticky-share-bar";
 import { TableOfContents } from "@/components/article/table-of-contents";
 import { AuthorCard } from "@/components/article/author-card";
@@ -67,26 +66,24 @@ export default async function ArticlePage({ params }: ArticlePageProps) {
         </div>
 
         <div>
-          <ArticleScrollTracker>
-            <article className="max-w-3xl">
-              <ArticleHeader article={article} />
-              <div className="my-8">
-                <LightboxImage src={article.coverImage.src} alt={article.coverImage.alt} />
-              </div>
-              <div className="mb-8 lg:hidden">
-                <StickyShareBar url={url} title={article.title} />
-              </div>
-              <ArticleBody content={article.content} />
-              <div className="mt-8 flex flex-wrap gap-2">
-                {article.tags.map((tag) => (
-                  <TagPill key={tag} tag={tag} />
-                ))}
-              </div>
-              <div className="mt-10">
-                <AuthorCard author={article.author} />
-              </div>
-            </article>
-          </ArticleScrollTracker>
+          <article className="max-w-3xl">
+            <ArticleHeader article={article} />
+            <div className="my-8">
+              <LightboxImage src={article.coverImage.src} alt={article.coverImage.alt} />
+            </div>
+            <div className="mb-8 lg:hidden">
+              <StickyShareBar url={url} title={article.title} />
+            </div>
+            <ArticleBody content={article.content} />
+            <div className="mt-8 flex flex-wrap gap-2">
+              {article.tags.map((tag) => (
+                <TagPill key={tag} tag={tag} />
+              ))}
+            </div>
+            <div className="mt-10">
+              <AuthorCard author={article.author} />
+            </div>
+          </article>
           <div className="mt-16 max-w-3xl">
             <RelatedArticlesSection articles={related} />
           </div>
